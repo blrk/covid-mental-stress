@@ -135,10 +135,82 @@ bartlett.test(DFSum)
 summary(DFSum)$r.squared 
 
 
+#Confirmatory Factor Analysis (CFA) one factor 
 #Confirmatory Factor Analysis (CFA)
+require(lavaan)  #for doing the CFA
+#require(semPlot)  #for plotting your CFA
+require(psych)  #for calculating cronbach's alpha
+require(dplyr)  #for subsetting data quickly when calculating cronbach's alpha
 
-
-library(cfa)
 HS.model <-'question = ~ PQ1 + PQ2 + PQ3 + PQ6 + PQ9 + PQ10 + PQ4 + PQ5 + PQ7 + PQ8'
-fit <- cfa(HS.model,DFSum)
+fit <-lavaan::cfa(HS.model,data=DFSum) # to avoid error 
 summary(fit, fit.measures=TRUE)
+fitmeasures(fit) 
+
+#Confirmatory Factor Analysis (CFA) two factor 
+
+HS.model <-'f1 = ~ PQ1 + PQ2 + PQ3 + PQ6 + PQ9 + PQ10
+f2 = ~ PQ4 + PQ5 + PQ7 + PQ8'
+
+fit <-lavaan::cfa(HS.model,data=DFSum) # to avoid error 
+summary(fit, fit.measures=TRUE)
+fitmeasures(fit) 
+
+#Internal consistency and item discrimination
+omega(df1)
+omega(df2)
+summary(cor(df1))
+
+
+
+# Corelation between GAD-7 and PSS
+#Factor1
+F1Sum<- df1 %>%
+  replace(is.na(.), 0) %>%
+  mutate(sum= rowSums(.[1:6]))
+F1Sum$sum
+#Factor2        
+F2Sum<- df2 %>%
+        replace(is.na(.), 0) %>%
+           mutate(sum= rowSums(.[1:4]))
+F2Sum$sum
+#TotalSum 
+TotalSum<- DFSum %>%
+  replace(is.na(.), 0) %>%
+  mutate(sum= rowSums(.[1:10]))
+TotalSum$sum
+
+
+GadData<-coded_data_GAD7
+g1<-GadData$`3. Feeling nervous, anxious, or on edge`
+g2<-GadData$`4. 0t being able to stop or control worrying`
+g3<-GadData$`5. Worrying too much about different things`
+g4<-GadData$`6. Trouble relaxing`
+g5<-GadData$`7. Being so restless that it's hard to sit still`
+g6<-GadData$`8. Becoming easily an0yed or irritable`
+g7<-GadData$`9. Feeling afraid as if something awful might happen`
+
+GadSum_DF<-data.frame(g1,g2,g3,g4,g5,g6,g7)
+GadTotalSum<- GadSum_DF %>%
+  replace(is.na(.), 0) %>%
+  mutate(sum= rowSums(.[1:7]))
+GadTotalSum$sum
+
+sum(GadTotalSum$sum >=5 & TotalSum$sum <= 9)
+sum(GadTotalSum$sum >=10 & TotalSum$sum <= 14)
+sum(GadTotalSum$sum >15)
+
+
+#Corelation
+
+#TotalPSS VS GAD7
+cor.test(TotalSum$sum[1:657],GadTotalSum$sum,alternative = "greater")
+
+#Factor1Total VS GAD7
+
+cor.test(F1Sum$sum[1:657],GadTotalSum$sum)
+
+#Factor2Total VS GAD7
+
+cor.test(F2Sum$sum[1:657],GadTotalSum$sum)
+
