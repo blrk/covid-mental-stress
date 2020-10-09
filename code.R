@@ -214,3 +214,160 @@ cor.test(F1Sum$sum[1:657],GadTotalSum$sum)
 
 cor.test(F2Sum$sum[1:657],GadTotalSum$sum)
 
+
+
+####################################
+
+##Degree Throws some error
+## Vote rank for node specific items
+## Pending
+
+library(multinet)
+library(stringr)
+can_activate <-data.frame(actor=factor(),layer=factor())
+new.df<-data.frame(actor=factor(),layer=factor(),Degree=numeric())
+active_nodes <- data.frame(actor=factor(),layer=factor())
+Seeds<-data.frame(actor=factor(),layer=factor())
+result<-data.frame(network_name=factor(), Seed_Option=factor(), network=factor(), seed_count=numeric(), no_of_seeds=numeric(), no_of_activated=numeric(), no_of_iterations=numeric())
+no_of_seeds<-factor()
+interation_no <- 0
+setwd("/Users/Research1723/Desktop/BelfinResearch/LayerSwitching_paper/Data/")
+
+out.file<-""
+file.names <- dir()
+
+#results_ss <- data.frame(network_name=factor(), Seed_Option=factor(), network=factor(), pp=numeric(), network_id=numeric(), seed_count=numeric(), no_of_seeds=numeric(), no_of_activated=numeric(), no_of_iterations=numeric())
+# # Loop Through Input Files
+##for(i in 1:length(file.names))
+#{#Start of File Loop
+results_ss <- data.frame(network_name=factor(), Seed_Option=factor(), network=factor(), seed_count=numeric(), no_of_seeds=numeric(), no_of_activated=numeric(), no_of_iterations=numeric())
+Data<-file.names[1]
+  # Input_Network<-ml_aucs()
+Input_Network <- read_ml(Data,sep = ",",aligned = F)
+  network <- unlist(strsplit(Data, "_"))[1]
+
+  for(seedPercent in c(0.02,0.05,0.10,0.20))
+  {#Start of Seed % loop
+    for(seedOption in c("random","degree","voteRank"))
+    {#Start Seed Option Loop
+      No_of_Seeds<-seedPercent*num_actors_ml(Input_Network, layers_ml(Input_Network))
+      if(seedOption=="random")
+      {
+        NodeDF<-vertices_ml(Input_Network,layers_ml(Input_Network))
+        Chosen_id<-sample(nrow(NodeDF), No_of_Seeds)
+        seedList<-NodeDF[Chosen_id,]
+      }
+      else if(seedOption=="voteRank")
+      {
+        MlLayerList<-layers_ml(Input_Network)
+        nodeList<-vertices_ml(Input_Network)
+        actorList<-actors_ml(Input_Network)
+        degreecalc<-list()
+        SeedList<-list()
+        #Tuple (Voting Score, #votes obtained)- (0,1)
+        SelectedSeeds<-data.frame(actor=factor(),layer=factor())
+        voteRankDF<-data.frame(nodes= nodeList$actor,layer=nodeList$layer,Score= c(rep(0,length(nodeList$actor))),votes=c(rep(1,length(nodeList$actor))))
+        for(loop in 1:No_of_Seeds)
+        {
+          for(i in 1:length(voteRankDF$nodes))
+          {
+            neig<-neighbors_ml(Input_Network,as.character(voteRankDF$nodes[i]),
+                               as.character(voteRankDF$layer[i]),"all")
+            for(j in neig )
+            {
+              voteRankDF[which(voteRankDF$nodes==voteRankDF$nodes[i]
+                               & voteRankDF$layer==voteRankDF$layer[i]),3] <-
+                voteRankDF$Score[i]+voteRankDF$votes[i]
+              
+              
+            }
+          }
+          degreecalc<-xneighborhood_ml(Input_Network,nodeList$actor,nodeList$layer,"all")
+          Seed<-voteRankDF[which.max(voteRankDF$Score),1:2]
+          SelectedSeeds<-rbind(SelectedSeeds,Seed)
+          voteRankDF[which.max(voteRankDF$Score),3:4]<-0
+          ReducingFactor<-1/mean(degreecalc)
+          neighSeed<-xneighbors_ml(Input_Network,Seed$nodes,Seed$layer,"all")
+          for(k in neighSeed)
+          {
+            voteRankDF[which(voteRankDF$nodes==k & voteRankDF$layer==Seed$layer),4]<-
+              voteRankDF[which(voteRankDF$nodes==k & voteRankDF$layer==Seed$layer),4]-ReducingFactor
+          }
+        }
+        seedList<-SelectedSeeds
+      }
+      else if(seedOption=="degree")
+      {
+        #Multiplex layer Degree?
+        nodeList<-vertices_ml(Input_Network)
+        neig1<-degree_ml(Input_Network,actors =nodeList$actor,layers = nodeList$layer,"all")
+        top_actors<-new.df[order( new.df[,3] ),1:2]
+        seedList<- tail(top_actors,No_of_Seeds)
+      }
+      else
+      {
+        break
+      }
+      for(threshold in c(0.1,0.2,0.3,0.5,0.8))
+      {#Start of CascadeProb loop
+        nodeList<-vertices_ml(Input_Network)
+        LayerList<-layers_ml(Input_Network)
+        seedOption<-seedOption
+        #Seeds<-seedList
+        can_activate <-Seeds
+        active_nodes <- Seeds
+        no_of_seeds<-nrow(Seeds)
+        interation_no <- 0
+        #while there is any node that can activate
+        while (nrow(can_activate)>0) 
+        {
+          interation_no <- interation_no + 1
+          print(interation_no)
+          activated_nodes <- data.frame(actor=factor(),layer=factor())
+          for(node in 1:nrow(can_activate))
+          {
+            #node_neigbours <- neighbors_ml(Input_Network)
+            #total.neighbors <- length(node_neigbours)
+            # activated.neighbors <- length(intersect(can_activate,node_neigbours))
+            
+            node_neigbours <- neighbors_ml(Input_Network,as.character(can_activate[node,1]),as.character(can_activate[node,2]))
+            total.neighbors<-length(node_neigbours)
+            activated.neighbors <- length(intersect(can_activate,node_neigbours))
+            for(node_neigbour in node_neigbours)
+            {
+              currentLayer<-as.character(can_activate[node,2])
+              node_neigbourDF<-data.frame(actor=node_neigbour,layer=currentLayer)
+              if((!(node_neigbourDF$actor %in% active_nodes$actor & 
+                    node_neigbourDF$layer %in% active_nodes$layer)) && 
+                 activated.neighbors * 1.0 / total.neighbors >= threshold)
+              {
+                activated_nodes <- rbind(activated_nodes, node_neigbourDF)
+                print(activated_nodes)
+                active_nodes <- rbind(active_nodes, node_neigbourDF)
+                print(active_nodes)
+              }
+            }
+          }
+          can_activate <- activated_nodes
+          result <- data.frame(network_name=Data,
+                               Seed_Option=seedOption, 
+                               network=network, 
+                               seed_count= seedPercent, 
+                               no_of_seeds= nrow(Seeds), 
+                               no_of_activated=length(unique(active_nodes$actor)), 
+                               no_of_iterations=interation_no)
+          
+          results_ss <- rbind(results_ss, result)
+        }
+      }#End of Cascade Prob loop
+      results_ss <- rbind(results_ss, result)
+    }#End Seed option Loop
+    
+  }#End of Seed % loop
+  file_path <- "/Users/Research1723/Desktop/BelfinResearch/LayerSwitching_paper/output/LTMNodeSpecific/"
+  save_path<- paste(file_path,network,"_LTM_Layer_Switch_output.txt", sep="")
+  write.csv(results_ss,save_path)
+#}#End of File Loop
+
+
+
